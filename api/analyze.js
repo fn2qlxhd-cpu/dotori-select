@@ -57,7 +57,7 @@ export default async function handler(req, res) {
             cons: { type: 'array', items: { type: 'string' } },
             strengths_vs_others: { type: 'array', items: { type: 'string' } },
             rank_reason: { type: 'string' },
-            loser_reason: { type: ['string', 'null'] }
+            loser_reason: { type: 'string', nullable: true }
           },
           required: ['id', 'name', 'scores', 'total', 'pros', 'cons']
         }
