@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "functions": {
+    "api/analyze.js": { "maxDuration": 60 },
+    "api/fetch-page.js": { "maxDuration": 15 }
+  }
+}
