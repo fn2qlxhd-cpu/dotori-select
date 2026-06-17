@@ -65,6 +65,12 @@ body{
 .lc-status.ok{color:var(--green)}
 .lc-status.err{color:var(--orange)}
 .lc-title{padding:0 14px 12px;font-size:13px;font-weight:700;color:var(--t2);display:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.manual-input{display:none;padding:0 14px 14px}
+.manual-input.show{display:block}
+.manual-hint{font-size:12px;color:var(--orange);background:rgba(255,149,0,.08);border:1px solid rgba(255,149,0,.2);border-radius:var(--r12);padding:9px 11px;line-height:1.5;margin-bottom:8px}
+.manual-textarea{width:100%;min-height:64px;padding:10px 12px;border-radius:var(--r12);border:1.5px solid var(--b2);background:var(--bg);font-size:13.5px;font-family:inherit;outline:none;resize:vertical;line-height:1.5}
+.manual-textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,122,255,.12)}
+.manual-textarea::placeholder{color:var(--t5)}
 .lc-title.show{display:block}
 .add-link-btn{width:100%;padding:13px;border-radius:var(--r16);border:1.5px dashed var(--blue);background:none;color:var(--blue);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px}
 .link-clear-btn{font-size:12px;font-weight:600;color:var(--red);background:var(--red-lt);border:none;border-radius:14px;padding:5px 11px;cursor:pointer;font-family:inherit;text-transform:none;letter-spacing:0}
@@ -240,11 +246,27 @@ function renderLinks(){
       <div class="lc-status ${l.status!=='idle'?'show':''} ${l.status}" id="ls-${l.id}">
         ${l.status==='fetching'?'<span class="spin">⏳</span> 페이지 읽는 중...':
           l.status==='ok'?'✅ 페이지 읽기 완료':
-          l.status==='err'?'⚠️ 읽기 실패 — URL 기반으로 분석':''}
+          l.status==='err'?'⚠️ 자동 읽기 실패 — 아래에 직접 입력해주세요':''}
       </div>
       <div class="lc-title ${l.title?'show':''}" id="lt-${l.id}">${esc(l.title)}</div>
+      <div class="manual-input ${l.status==='err'?'show':''}" id="mi-${l.id}">
+        <div class="manual-hint">📝 네이버 등 일부 사이트는 자동으로 못 읽어와요. 제품명·가격·특징을 간단히 적어주시면 분석에 그대로 활용돼요.</div>
+        <textarea class="manual-textarea" maxlength="1500" placeholder="예) 쿠쿠 선풍기 CF-XXXX, 49,000원, BLDC모터 저소음, 리모컨 포함, 후기 4.5점"
+          onchange="setManualContent(${l.id},this.value)">${esc(l.manualContent||'')}</textarea>
+      </div>
     </div>`).join('');
   $('addBtn').style.display=links.length>=5?'none':'';
+}
+function setManualContent(id,val){
+  const l=links.find(l=>l.id===id);if(!l)return;
+  l.manualContent=val.trim().slice(0,1500); // 안전망: HTML maxlength를 우회해도 여기서 한번 더 제한
+  if(l.manualContent){
+    l.content=l.manualContent;
+    l.title=l.title||'직접 입력한 제품';
+    l.status='manual'; // 사용자가 직접 채운 상태 — ok와 동일하게 분석 진행 가능
+  }
+  save();
+  updateCTA();
 }
 function setUrl(id,val){
   const l=links.find(l=>l.id===id);if(!l)return;
@@ -282,13 +304,14 @@ async function fetchPage(id){
   return l;
 }
 function updateCard(l){
-  const se=$(`ls-${l.id}`),te=$(`lt-${l.id}`);
+  const se=$(`ls-${l.id}`),te=$(`lt-${l.id}`),mi=$(`mi-${l.id}`);
   if(se){
     se.className=`lc-status show ${l.status}`;
     se.innerHTML=l.status==='fetching'?'<span class="spin">⏳</span> 페이지 읽는 중...':
-      l.status==='ok'?'✅ 페이지 읽기 완료':'⚠️ 읽기 실패 — URL 기반으로 분석';
+      l.status==='ok'?'✅ 페이지 읽기 완료':'⚠️ 자동 읽기 실패 — 아래에 직접 입력해주세요';
   }
   if(te){te.textContent=l.title;te.className=`lc-title ${l.title?'show':''}`;}
+  if(mi){mi.classList.toggle('show', l.status==='err');}
 }
 function toggleTag(btn,val){
   btn.classList.toggle('on');
@@ -297,17 +320,17 @@ function toggleTag(btn,val){
   save();
 }
 function updateCTA(){
-  const vl=links.filter(l=>l.url.trim().startsWith('http'));
+  const vl=links.filter(l=>l.url.trim().startsWith('http')||l.manualContent);
   const ok=vl.length>=2;
   $('ctaBtn').disabled=!ok;
-  $('ctaTxt').textContent=ok?'🌰 지금 바로 비교해줘!':`링크를 ${vl.length}/2개 입력했어요`;
+  $('ctaTxt').textContent=ok?'🌰 지금 바로 비교해줘!':`제품을 ${vl.length}/2개 입력했어요`;
   $('ctaHint').textContent=ok
     ?`${vl.length}개 제품 · ${tags.length?tags.join(', ')+' 기준':'종합 기준'} 비교`
-    :'링크 2개 이상 입력하면 분석 시작!';
+    :'링크 또는 직접 입력으로 2개 이상 넣으면 분석 시작!';
 }
 
 async function analyze(){
-  // input 값을 DOM에서 직접 다시 읽어서 동기화 (onchange 누락 방지)
+  // input/textarea 값을 DOM에서 직접 다시 읽어서 동기화 (onchange 누락 방지)
   document.querySelectorAll('.lc-url').forEach(input=>{
     const card=input.closest('.link-card');
     if(!card)return;
@@ -315,18 +338,26 @@ async function analyze(){
     const l=links.find(l=>l.id===id);
     if(l&&input.value.trim())l.url=input.value.trim();
   });
+  document.querySelectorAll('.manual-textarea').forEach(ta=>{
+    const wrap=ta.closest('.link-card');
+    if(!wrap)return;
+    const id=parseFloat(wrap.id.replace('lc-',''));
+    if(ta.value.trim()) setManualContent(id, ta.value);
+  });
   save();
 
-  const vl=links.filter(l=>l.url && l.url.startsWith('http'));
-  if(vl.length<2){toast('링크를 2개 이상 입력해주세요');return;}
+  const vl=links.filter(l=>(l.url&&l.url.startsWith('http'))||l.manualContent);
+  if(vl.length<2){toast('링크 또는 직접 입력으로 제품을 2개 이상 넣어주세요');return;}
 
   showResultSection();
   showLoading();
 
-  // 안 읽은 링크들 fetch — 병렬, 실패해도 무조건 진행 (allSettled)
-  const needFetch=vl.filter(l=>l.status!=='ok'&&l.status!=='err');
-  if(needFetch.length>0){
-    await Promise.allSettled(needFetch.map(l=>fetchPage(l.id)));
+  // 아직 안 읽었고 URL이 있는 것만 fetch — 직접 입력된 것은 그대로 사용
+  // 순차 처리(동시 요청 시 Jina Reader가 429로 거절하는 것을 방지)
+  const needFetch=vl.filter(l=>l.url&&l.status!=='ok'&&l.status!=='err'&&l.status!=='manual');
+  for(let i=0;i<needFetch.length;i++){
+    await fetchPage(needFetch[i].id);
+    if(i<needFetch.length-1) await new Promise(r=>setTimeout(r,800)); // 다음 요청 전 약간의 간격
   }
   save();
 
@@ -346,15 +377,16 @@ async function callAI(vl){
 - 사용자가 선택한 중요 기준에 더 높은 가중치 부여
 - 실사용 후기 데이터 최우선 반영
 - 반드시 한국어로 작성
-- 응답 길이 제한: 전체 결과는 매우 짧게 작성. pros/cons는 각 2개 이하, 각 25자 이내. rank_reason/winner_reason/loser_reason은 각각 1문장만 작성
+- 응답 길이 제한: pros/cons는 각 2~3개만, 각 항목 1문장 이내로 간결하게. rank_reason과 winner_reason도 2~3문장 이내로 짧게 작성
 - products 배열의 각 id는 0부터 시작하는 정수, winner_id는 그중 하나와 일치해야 함
-- 탈락 제품만 loser_reason에 1문장 이유 작성. 추천 제품의 loser_reason은 null
-- checklist는 최대 3개만 작성`;
+- 탈락 제품만 loser_reason에 2문장 이유 작성. 추천 제품의 loser_reason은 null`;
 
-  const productBlock=vl.map((l,i)=>`[제품 ${i+1}]
-URL: ${l.url}
-제목: ${l.title||'(없음)'}
-페이지 내용:\n${l.content?l.content.slice(0,1600):'(읽기 실패 — URL로만 분석)'}`).join('\n---\n');
+  const productBlock=vl.map((l,i)=>{
+    if(l.status==='manual'||!l.url){
+      return `[제품 ${i+1}] (사용자 직접 입력)\n${l.manualContent||l.content}`;
+    }
+    return `[제품 ${i+1}]\nURL: ${l.url}\n제목: ${l.title||'(없음)'}\n페이지 내용:\n${l.content?l.content.slice(0,2800):'(읽기 실패 — URL로만 분석)'}`;
+  }).join('\n---\n');
 
   const userMsg=`다음 제품들을 비교해서 순위를 매기고 1개를 추천해주세요.\n\n${productBlock}\n\n사용자 중요 기준: ${tags.length?tags.join(', '):'종합 균형'}`;
 
@@ -499,8 +531,12 @@ function copyResult(){
 }
 function resetResult(){
   resultData=null;
-  links=links.map(l=>({...l,status:'idle',content:'',title:''}));
+  links=links.map(l=>{
+    if(l.manualContent) return {...l, status:'manual', content:l.manualContent};
+    return {...l, status:'idle', content:'', title:''};
+  });
   save();$('resultSection').style.display='none';$('resultBody').innerHTML='';
+  renderLinks();
   window.scrollTo({top:0,behavior:'smooth'});
 }
 </script>
