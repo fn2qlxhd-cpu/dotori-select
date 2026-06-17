@@ -53,17 +53,17 @@ export default async function handler(req, res) {
               }
             },
             total: { type: 'number' },
-            pros: { type: 'array', items: { type: 'string' } },
-            cons: { type: 'array', items: { type: 'string' } },
-            strengths_vs_others: { type: 'array', items: { type: 'string' } },
+            pros: { type: 'array', maxItems: 2, items: { type: 'string' } },
+            cons: { type: 'array', maxItems: 2, items: { type: 'string' } },
+            strengths_vs_others: { type: 'array', maxItems: 2, items: { type: 'string' } },
             rank_reason: { type: 'string' },
-            loser_reason: { type: 'string', nullable: true }
+            loser_reason: { type: ['string', 'null'] }
           },
           required: ['id', 'name', 'scores', 'total', 'pros', 'cons']
         }
       },
       winner_reason: { type: 'string' },
-      checklist: { type: 'array', items: { type: 'string' } }
+      checklist: { type: 'array', maxItems: 3, items: { type: 'string' } }
     },
     required: ['verdict', 'winner_id', 'products', 'winner_reason', 'checklist']
   };
@@ -79,7 +79,7 @@ export default async function handler(req, res) {
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema,
-      maxOutputTokens: 4096,
+      maxOutputTokens: 8192,
       temperature: 0.4
     }
   };
@@ -107,7 +107,7 @@ export default async function handler(req, res) {
     const finishReason = data.candidates?.[0]?.finishReason;
     if (finishReason === 'MAX_TOKENS') {
       return res.status(200).json({
-        error: '응답이 너무 길어 중간에 끊겼어요. 링크 수를 줄여서 다시 시도해주세요.',
+        error: 'AI 응답이 너무 길어져서 중간에 끊겼어요. 제품 페이지 내용은 줄여서 보냈지만 계속 발생하면 링크 수를 2~3개로 줄여주세요.',
         partial: true
       });
     }
